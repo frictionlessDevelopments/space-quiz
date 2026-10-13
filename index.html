@@ -466,6 +466,26 @@
       transform: translateY(0);
     }
 
+    .share-status {
+      margin: 12px 0;
+      padding: 10px 12px;
+      border: 1px solid var(--correct-border);
+      border-radius: 10px;
+      color: var(--text);
+      background: var(--option-bg);
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .share-status:empty {
+      display: none;
+    }
+
+    .share-status.error {
+      border-color: var(--wrong-border);
+      color: var(--text);
+    }
+
     /* Results Screen */
     .results-view {
       text-align: center;
@@ -664,6 +684,11 @@
           </div>
         </div>
 
+        <button class="action-btn" id="share-btn" aria-label="Share Mission Report">
+          <span>📋 Share Mission Report</span>
+        </button>
+        <p class="share-status" id="share-status" role="status" aria-live="polite" aria-atomic="true"></p>
+
         <button class="action-btn" id="restart-btn">
           <span>🔄 Launch Again</span>
         </button>
@@ -738,6 +763,7 @@
     let currentQuestionIndex = 0;
     let score = 0;
     let hasAnswered = false;
+    let answerResults = [];
 
     // DOM Elements
     const quizView = document.getElementById('quiz-view');
@@ -762,6 +788,8 @@
     const finalScoreDisplay = document.getElementById('final-score-display');
     const correctCountEl = document.getElementById('correct-count');
     const wrongCountEl = document.getElementById('wrong-count');
+    const shareBtn = document.getElementById('share-btn');
+    const shareStatus = document.getElementById('share-status');
     const restartBtn = document.getElementById('restart-btn');
 
     // Canvas Confetti
@@ -836,6 +864,9 @@
     function initQuiz() {
       currentQuestionIndex = 0;
       score = 0;
+      answerResults = [];
+      shareStatus.textContent = '';
+      shareStatus.className = 'share-status';
       updateScoreDisplay(false);
       quizView.style.display = 'block';
       resultsView.style.display = 'none';
@@ -898,6 +929,7 @@
 
       const q = quizData[currentQuestionIndex];
       const isCorrect = selectedIndex === q.answer;
+      answerResults[currentQuestionIndex] = isCorrect;
       const optionButtons = optionsContainer.querySelectorAll('.option-btn');
 
       optionButtons.forEach((btn, idx) => {
@@ -993,10 +1025,86 @@
       reactionEmoji.textContent = emoji;
       resultTitle.textContent = title;
       resultSubtitle.textContent = subtitle;
-      restartBtn.focus();
+      shareBtn.focus();
+    }
+
+    function getMissionReport() {
+      const resultGrid = answerResults
+        .map(isCorrect => isCorrect ? '🟩' : '🟥')
+        .join('');
+      return `🚀 Cosmic Quest: ${score}/${quizData.length} 🌟 | ${resultGrid}`;
+    }
+
+    async function copyMissionReport(report) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+          await navigator.clipboard.writeText(report);
+          return;
+        } catch (error) {
+          if (typeof document.execCommand !== 'function') {
+            throw error;
+          }
+        }
+      }
+
+      if (typeof document.execCommand !== 'function') {
+        throw new Error('Clipboard access is unavailable.');
+      }
+
+      const textArea = document.createElement('textarea');
+      textArea.value = report;
+      textArea.setAttribute('readonly', '');
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      const previouslyFocusedElement = document.activeElement;
+      try {
+        textArea.select();
+        if (!document.execCommand('copy')) {
+          throw new Error('Clipboard access is unavailable.');
+        }
+      } finally {
+        textArea.remove();
+        if (previouslyFocusedElement && typeof previouslyFocusedElement.focus === 'function') {
+          previouslyFocusedElement.focus();
+        }
+      }
+    }
+
+    async function shareMissionReport() {
+      shareStatus.textContent = '';
+      shareStatus.className = 'share-status';
+      const report = getMissionReport();
+
+      if (typeof navigator.share === 'function') {
+        try {
+          await navigator.share({
+            title: 'Cosmic Quest Mission Report',
+            text: report
+          });
+          shareStatus.textContent = 'Mission report shared!';
+        } catch (error) {
+          if (error && error.name === 'AbortError') {
+            shareStatus.textContent = 'Sharing cancelled.';
+            return;
+          }
+          shareStatus.classList.add('error');
+          shareStatus.textContent = 'Unable to share the mission report.';
+        }
+        return;
+      }
+
+      try {
+        await copyMissionReport(report);
+        shareStatus.textContent = 'Copied to clipboard!';
+      } catch (error) {
+        shareStatus.classList.add('error');
+        shareStatus.textContent = 'Unable to copy the mission report to the clipboard.';
+      }
     }
 
     nextBtn.addEventListener('click', handleNext);
+    shareBtn.addEventListener('click', shareMissionReport);
     restartBtn.addEventListener('click', initQuiz);
 
     // Keyboard support: 1-4 or A-D to pick answers, Enter/Space for next
